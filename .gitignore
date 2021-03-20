@@ -9,3 +9,8 @@ dist/
 .env
 .venv
 Pipfile
+Pipfile.lock
+
+credentials.json
+token.json
+token.pickle
