@@ -40,22 +40,35 @@ if not creds or not creds.valid:
 service = build('calendar', 'v3', credentials=creds)
 
 
-def fetch_tasks():
-    result = client.get_collection_view(url)
-    # TODO now以降のものにフィルターする
-    return list(filter(lambda row: row.deadline, result.collection.get_rows()))
+def fetch_new_records(cv, now):
+    return cv.collection.get_rows()
 
 
 def fetch_calendars(now):
-    events_result = service.events().list(calendarId='primary', timeMin=now,
-                                          maxResults=100, singleEvents=True,
-                                          orderBy='startTime').execute()
+    time_min = now.isoformat() + 'Z'  # 'Z' indicates UTC time
+    events_result = service.events().list(
+        calendarId='primary',
+        timeMin=time_min,
+        maxResults=100,
+        singleEvents=True,
+        orderBy='startTime').execute()
     event_names = list(
         map(lambda e: e['summary'], events_result.get('items', [])))
 
     if not event_names:
         print('No upcoming events found.')
     return event_names
+
+
+def get_target_tasks(cv, now):
+    return list(
+        filter(
+            lambda task: task.deadline and datetime.datetime.combine(
+                task.deadline.start,
+                datetime.time(0)) > now and task.name not in fetch_calendars(now),
+            fetch_new_records(
+                cv,
+                now)))
 
 
 def create_calendar(name, date):
@@ -78,12 +91,10 @@ def create_calendar(name, date):
 
 
 def main():
-    now = datetime.datetime.utcnow().isoformat() + 'Z'  # 'Z' indicates UTC time
+    cv = client.get_collection_view(url)
+    now = datetime.datetime.utcnow()
 
-    targets = list(
-        filter(
-            lambda task: task.name not in fetch_calendars(now),
-            fetch_tasks()))
+    targets = get_target_tasks(cv, now)
 
     if len(targets) > 0:
         for task in targets:
